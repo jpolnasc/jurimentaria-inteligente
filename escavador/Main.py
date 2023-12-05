@@ -1,21 +1,17 @@
 import argparse
 import br.cefetmg.stf.stf_scrapper as stf_scrapper_module
 import pandas as pd
-from threading import Thread
+from concurrent.futures import ThreadPoolExecutor
 
-def scrape_page_and_collect(scrapper, query, page_number, results):
+def scrape_page(scrapper, query, page_number):
     """
-    Raspagem de uma única página e coleta os resultados.
+    Função para raspar uma única página.
     """
-    result = scrapper.scrape_page(query, page_number)
-    if result:
-        results.append(result)
+    return scrapper.scrape_page(query, page_number)
 
 def main():
     # Crie o parser
     parser = argparse.ArgumentParser(description='Realize uma pesquisa no site do STF e extraia informações.')
-
-    # Adicione os argumentos
     parser.add_argument('query', type=str, help='A query para pesquisar.')
     parser.add_argument('max_pages', type=int, help='O número máximo de páginas para pesquisar.')
 
@@ -25,19 +21,12 @@ def main():
     # Crie o scrapper
     stf_scrapper = stf_scrapper_module.stf_scrapper()
 
-    # Lista para armazenar os resultados de cada thread
+    # Crie um ThreadPoolExecutor para gerenciar as threads
     results = []
-
-    # Cria uma thread para cada página a ser raspada
-    threads = []
-    for page_number in range(1, args.max_pages + 1):
-        t = Thread(target=scrape_page_and_collect, args=(stf_scrapper, args.query, page_number, results))
-        t.start()
-        threads.append(t)
-
-    # Aguarda todas as threads terminarem
-    for t in threads:
-        t.join()
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_page = {executor.submit(scrape_page, stf_scrapper, args.query, page_number): page_number for page_number in range(1, args.max_pages + 1)}
+        for future in concurrent.futures.as_completed(future_to_page):
+            results.append(future.result())
 
     # Converta a lista de dicionários em um DataFrame
     data_frame = pd.DataFrame(results)
@@ -48,6 +37,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-# python3 Main.py "licita$" 7460
-## python3 Main.py "licita$" 100
