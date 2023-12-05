@@ -1,47 +1,53 @@
-#from br.cefetmg.tools.system_logger import configure_scraper_logger
-#from br.cefetmg.stf.stf_scrapper import perform_simple_stf_search
-import logging
+import argparse
+import br.cefetmg.stf.stf_scrapper as stf_scrapper_module
+import pandas as pd
+from threading import Thread
 
-# 
-# configure_scraper_logger(debug_file='systemMessages.log', error_file='systemError.log')
-# 
-# logger = logging.getLogger('scraper')
-# 
-# logger.info('Starting the scrapper.')
-# 
-# perform_simple_stf_search('lei')
+def scrape_page_and_collect(scrapper, query, page_number, results):
+    """
+    Raspagem de uma única página e coleta os resultados.
+    """
+    result = scrapper.scrape_page(query, page_number)
+    if result:
+        results.append(result)
 
-from br.cefetmg.db.postgress_interface import PostgressInterface
-from br.cefetmg.credentials import DEV_POSTGRES
-from br.cefetmg.db.jurisprudency_interface import JurisprudencyInterface
-from br.cefetmg.db.jurisprudency_dataclass import JurisprudencyDataclass
+def main():
+    # Crie o parser
+    parser = argparse.ArgumentParser(description='Realize uma pesquisa no site do STF e extraia informações.')
 
+    # Adicione os argumentos
+    parser.add_argument('query', type=str, help='A query para pesquisar.')
+    parser.add_argument('max_pages', type=int, help='O número máximo de páginas para pesquisar.')
 
+    # Parse os argumentos
+    args = parser.parse_args()
 
-db = PostgressInterface(host=DEV_POSTGRES['URL'], database=DEV_POSTGRES['DATABASE'], user=DEV_POSTGRES['USER'], password=DEV_POSTGRES['PASSWORD'])
+    # Crie o scrapper
+    stf_scrapper = stf_scrapper_module.stf_scrapper()
 
-db.connect()
-print(db.test_connection())
-db.disconnect()
-print(db.test_connection())
+    # Lista para armazenar os resultados de cada thread
+    results = []
 
+    # Cria uma thread para cada página a ser raspada
+    threads = []
+    for page_number in range(1, args.max_pages + 1):
+        t = Thread(target=scrape_page_and_collect, args=(stf_scrapper, args.query, page_number, results))
+        t.start()
+        threads.append(t)
 
-jurisprudency_interface = JurisprudencyInterface(host=DEV_POSTGRES['URL'], database=DEV_POSTGRES['DATABASE'], user=DEV_POSTGRES['USER'], password=DEV_POSTGRES['PASSWORD'])
+    # Aguarda todas as threads terminarem
+    for t in threads:
+        t.join()
 
-mock_jurisprudency = jurisprudency_interface.mock_jurisprudency()
+    # Converta a lista de dicionários em um DataFrame
+    data_frame = pd.DataFrame(results)
+    print(data_frame.head(5))
 
-jurisprudency_interface.insert_jurisprudency(mock_jurisprudency)
+    # Salve o DataFrame em um arquivo CSV
+    data_frame.to_csv('resultado_pesquisa.csv', index=False)
 
-# test get_jurisprudency
-print(jurisprudency_interface.get_jurisprudency(mock_jurisprudency.id))
+if __name__ == "__main__":
+    main()
 
-# test delete_jurisprudency
-jurisprudency_interface.delete_jurisprudency(mock_jurisprudency.id)
-
-# test get_jurisprudency
-print(jurisprudency_interface.get_jurisprudency(mock_jurisprudency.id))
-
-
-
-
-
+# python3 Main.py "licita$" 7460
+## python3 Main.py "licita$" 100
